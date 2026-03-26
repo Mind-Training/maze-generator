@@ -68,10 +68,9 @@ class MazeBoardGenerator:
             letter_positions = self._choose_letter_indices(
                 len(final_solution_path), len(self.word)
             )
-            letter_by_coord = {
-                final_solution_path[idx]: ch
-                for idx, ch in zip(letter_positions, self.word)
-            }
+            letter_by_coord = self._build_letter_map(
+                final_solution_path, letter_positions
+            )
 
             return self._build_board_json(
                 allowed_edges=allowed_edges,
@@ -459,6 +458,22 @@ class MazeBoardGenerator:
 
         result.append(max_index)
         return result
+
+    def _build_letter_map(
+        self,
+        solution_path: List[Coordinate],
+        letter_positions: List[int],
+    ) -> Dict[Coordinate, str]:
+        letter_by_coord = {
+            solution_path[idx]: ch for idx, ch in zip(letter_positions, self.word)
+        }
+
+        # Caso especial para palabras de una sola letra:
+        # el path debe empezar y terminar en celdas con letra.
+        if len(self.word) == 1:
+            letter_by_coord[solution_path[-1]] = self.word[0]
+
+        return letter_by_coord
 
     def _build_board_json(
         self,
