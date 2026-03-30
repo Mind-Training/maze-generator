@@ -20,6 +20,7 @@ class MazeGeneratorConfig:
     max_graph_attempts: int = 200
     max_path_attempts_per_graph: int = 80
     seed: Optional[int] = None
+    wrap_in_board_key: bool = True
 
 
 class MazeBoardGenerator:
@@ -516,22 +517,25 @@ class MazeBoardGenerator:
 
             cells_json.append(row_cells)
 
-        return {
-            "board": {
-                "metadata": {
-                    "id": self.config.board_id,
-                    "title": self.config.title,
-                    "target": self.word,
-                    "locale": self.config.locale,
-                },
-                "dimensions": {
-                    "rows": self.size,
-                    "cols": self.size,
-                },
-                "cells": cells_json,
-                "solutionPath": [{"row": r, "col": c} for r, c in solution_path],
-            }
+        board_content = {
+            "metadata": {
+                "id": self.config.board_id,
+                "title": self.config.title,
+                "target": self.word,
+                "locale": self.config.locale,
+            },
+            "dimensions": {
+                "rows": self.size,
+                "cols": self.size,
+            },
+            "cells": cells_json,
+            "solutionPath": [{"row": r, "col": c} for r, c in solution_path],
         }
+
+        if self.config.wrap_in_board_key:
+            return {"board": board_content}
+
+        return board_content
 
     def _has_wall(
         self,

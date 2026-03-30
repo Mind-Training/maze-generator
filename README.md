@@ -32,8 +32,20 @@ config = MazeGeneratorConfig(
 
 generator = MazeBoardGenerator(config)
 board = generator.generate()
-
 print(board["board"]["metadata"])
+
+# Para devolver el contenido directamente (sin clave "board")
+flat_config = MazeGeneratorConfig(
+    size=10,
+    word="CHATGPT",
+    locale="es",
+    board_id="maze-chatgpt-10x10",
+    title="Maze - CHATGPT",
+    seed=20,
+    wrap_in_board_key=False,
+)
+flat_board = MazeBoardGenerator(flat_config).generate()
+print(flat_board["metadata"])
 ```
 
 ## API principal
@@ -51,6 +63,7 @@ Dataclass de configuración del generador:
 - `max_graph_attempts`: intentos máximos de generación de grafo
 - `max_path_attempts_per_graph`: intentos de path hamiltoniano por grafo
 - `seed`: semilla para reproducibilidad
+- `wrap_in_board_key`: si `True` devuelve `{"board": {...}}`; si `False` devuelve directamente `{...}`
 
 ### `MazeBoardGenerator`
 
@@ -75,6 +88,7 @@ board = generate_maze_board(
     board_id="maze-TESTING-6x6",
     title="Maze - TESTING",
     seed=20,
+    wrap_in_board_key=False,
 )
 ```
 
