@@ -37,7 +37,9 @@ class MazeBoardGenerator:
         self.word = normalize_word(config.word)
 
         if any(type(axis) is not int or axis < 2 for axis in (self.rows, self.cols)):
-            raise ValueError("Rows and columns must be integers greater than or equal to 2.")
+            raise ValueError(
+                "Rows and columns must be integers greater than or equal to 2."
+            )
         if not self.word:
             raise ValueError("word no puede estar vacía")
         if len(self.word) > self.rows * self.cols:
@@ -503,7 +505,8 @@ class MazeBoardGenerator:
         if gaps < 1 or total - 1 > gaps * max_step:
             raise ValueError("The word is too short for the maximum empty run.")
         starts = [
-            (r, c) for r, c in self.cells
+            (r, c)
+            for r, c in self.cells
             if not (r in (0, self.rows - 1) and c in (0, self.cols - 1))
             and (total % 2 == 0 or (r + c) % 2 == 0)
         ]
@@ -517,13 +520,6 @@ class MazeBoardGenerator:
                 key=lambda edge: sorted(edge),
             )
             self.random.shuffle(candidates)
-            indices = [0]
-            for remaining in range(gaps - 1, -1, -1):
-                distance = total - 1 - indices[-1]
-                low = max(1, distance - remaining * max_step)
-                high = min(max_step, distance - remaining)
-                indices.append(indices[-1] + self.random.randint(low, high))
-            letters = self._build_letter_map(path, indices)
             # Move toward more restrictive boards when the preferred density
             # leaves multiple solutions or exhausts the solver budget.
             target = self.config.wall_target
@@ -531,9 +527,22 @@ class MazeBoardGenerator:
                 target = max(self.config.min_walls, target) + attempt
             wall_count = min(len(candidates), self.config.max_walls, target)
             open_edges = self.grid_edges - set(candidates[:wall_count])
-            if count_solutions(self.cells, open_edges, path[0], letters, self.word) == 1:
+
+            indices = [0]
+            for remaining in range(gaps - 1, -1, -1):
+                distance = total - 1 - indices[-1]
+                low = max(1, distance - remaining * max_step)
+                high = min(max_step, distance - remaining)
+                indices.append(indices[-1] + self.random.randint(low, high))
+            letters = self._build_letter_map(path, indices)
+            if (
+                count_solutions(self.cells, open_edges, path[0], letters, self.word)
+                == 1
+            ):
                 return self._build_board_json(open_edges, path, letters)
-        raise RuntimeError("Could not prove a unique Maze solution within the generation budget.")
+        raise RuntimeError(
+            "Could not prove a unique Maze solution within the generation budget."
+        )
 
     def _build_board_json(
         self,

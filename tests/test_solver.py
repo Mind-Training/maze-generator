@@ -9,7 +9,8 @@ class MazeSolverTests(unittest.TestCase):
         cells = [(r, c) for r in range(3) for c in range(3)]
         edges = {
             frozenset((a, b))
-            for a in cells for b in cells
+            for a in cells
+            for b in cells
             if abs(a[0] - b[0]) + abs(a[1] - b[1]) == 1
         }
         start = (0, 0)
@@ -22,8 +23,15 @@ class MazeSolverTests(unittest.TestCase):
 
     def test_rectangular_board_and_letter_spacing(self):
         config = MazeGeneratorConfig(
-            size=None, rows=5, cols=7, word="LABIRINTO", wall_target=4,
-            min_walls=4, max_walls=12, max_empty_run=10, seed=0,
+            size=None,
+            rows=5,
+            cols=7,
+            word="LABIRINTO",
+            wall_target=4,
+            min_walls=4,
+            max_walls=12,
+            max_empty_run=10,
+            seed=0,
         )
         board = MazeBoardGenerator(config).generate()["board"]
         self.assertEqual(board["dimensions"], {"rows": 5, "cols": 7})
@@ -33,7 +41,9 @@ class MazeSolverTests(unittest.TestCase):
         letters = [board["cells"][r][c].get("letter") for r, c in path]
         self.assertEqual("".join(letter for letter in letters if letter), "LABIRINTO")
         positions = [i for i, letter in enumerate(letters) if letter]
-        self.assertLessEqual(max(b - a - 1 for a, b in zip(positions, positions[1:])), 10)
+        self.assertLessEqual(
+            max(b - a - 1 for a, b in zip(positions, positions[1:])), 10
+        )
 
 
 if __name__ == "__main__":

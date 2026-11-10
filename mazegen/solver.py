@@ -1,6 +1,8 @@
 """Count complete paths from the marked start that spell the target."""
 
+
 def count_solutions(cells, edges, start, letters, word, *, budget=30_000):
+    """Return 0, 1, 2 (at least two), or None if the search budget runs out."""
     ids = {cell: index for index, cell in enumerate(cells)}
     neighbors = [[] for _ in cells]
     for a, b in edges:
