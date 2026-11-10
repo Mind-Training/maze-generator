@@ -8,16 +8,21 @@ from .types import BoardDict
 
 def generate_maze_board(
     word: str,
-    size: int,
+    size: Optional[int] = None,
     locale: str = "es",
     board_id: str = "maze-generated",
     title: Optional[str] = None,
     seed: Optional[int] = None,
     wrap_in_board_key: bool = True,
+    *,
+    rows: Optional[int] = None,
+    cols: Optional[int] = None,
 ) -> BoardDict:
     """Generate a maze board dictionary using a simple function-style API."""
     config = MazeGeneratorConfig(
         size=size,
+        rows=rows,
+        cols=cols,
         word=word,
         locale=locale,
         board_id=board_id,

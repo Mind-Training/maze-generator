@@ -10,7 +10,7 @@ from .utils import normalize_word
 
 @dataclass
 class MazeGeneratorConfig:
-    size: int
+    size: Optional[int]
     word: str
     locale: str = "es"
     board_id: str = "maze-generated"
@@ -21,30 +21,39 @@ class MazeGeneratorConfig:
     max_path_attempts_per_graph: int = 80
     seed: Optional[int] = None
     wrap_in_board_key: bool = True
+    rows: Optional[int] = None
+    cols: Optional[int] = None
+    wall_target: Optional[int] = None
+    min_walls: int = 0
+    max_walls: Optional[int] = None
+    max_empty_run: Optional[int] = None
 
 
 class MazeBoardGenerator:
     def __init__(self, config: MazeGeneratorConfig):
         self.config = config
-        self.size = config.size
+        self.rows = config.rows if config.rows is not None else config.size
+        self.cols = config.cols if config.cols is not None else config.size
         self.word = normalize_word(config.word)
 
-        if self.size < 2:
-            raise ValueError("size debe ser >= 2")
+        if any(type(axis) is not int or axis < 2 for axis in (self.rows, self.cols)):
+            raise ValueError("Rows and columns must be integers greater than or equal to 2.")
         if not self.word:
             raise ValueError("word no puede estar vacía")
-        if len(self.word) > self.size * self.size:
+        if len(self.word) > self.rows * self.cols:
             raise ValueError(
-                f"La palabra tiene {len(self.word)} letras y no cabe en un tablero {self.size}x{self.size}"
+                f"La palabra tiene {len(self.word)} letras y no cabe en un tablero {self.rows}x{self.cols}"
             )
 
         self.random = random.Random(config.seed)
         self.cells: List[Coordinate] = [
-            (r, c) for r in range(self.size) for c in range(self.size)
+            (r, c) for r in range(self.rows) for c in range(self.cols)
         ]
         self.grid_edges: Set[Edge] = self._all_grid_edges()
 
     def generate(self) -> BoardDict:
+        if self.config.wall_target is not None:
+            return self._generate_unique()
         for _ in range(self.config.max_graph_attempts):
             try:
                 base_solution_path = self._build_random_hamiltonian_path()
@@ -87,8 +96,8 @@ class MazeBoardGenerator:
 
     def _all_grid_edges(self) -> Set[Edge]:
         edges: Set[Edge] = set()
-        for r in range(self.size):
-            for c in range(self.size):
+        for r in range(self.rows):
+            for c in range(self.cols):
                 current = (r, c)
                 for neighbor in self._neighbors(current):
                     if neighbor > current:
@@ -100,22 +109,23 @@ class MazeBoardGenerator:
         result = []
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
-            if 0 <= nr < self.size and 0 <= nc < self.size:
+            if 0 <= nr < self.rows and 0 <= nc < self.cols:
                 result.append((nr, nc))
         return result
 
     def _edges_from_path(self, path: List[Coordinate]) -> Set[Edge]:
         return {frozenset((path[i], path[i + 1])) for i in range(len(path) - 1)}
 
-    def _build_random_hamiltonian_path(self) -> List[Coordinate]:
-        total = self.size * self.size
+    def _build_random_hamiltonian_path(self, starts=None) -> List[Coordinate]:
+        total = self.rows * self.cols
 
         for _ in range(self.config.max_path_attempts_per_graph):
-            start = self.random.choice(self.cells)
+            start = self.random.choice(starts or self.cells)
             visited: Set[Coordinate] = {start}
             path = [start]
 
-            if self._backtrack_grid_path(start, visited, path, total):
+            budget = [10_000] if starts is not None else None
+            if self._backtrack_grid_path(start, visited, path, total, budget):
                 return path
 
         raise RuntimeError("No se pudo construir solutionPath")
@@ -126,7 +136,12 @@ class MazeBoardGenerator:
         visited: Set[Coordinate],
         path: List[Coordinate],
         total: int,
+        budget: Optional[List[int]],
     ) -> bool:
+        if budget is not None:
+            if budget[0] <= 0:
+                return False
+            budget[0] -= 1
         if len(path) == total:
             return True
 
@@ -139,7 +154,7 @@ class MazeBoardGenerator:
             path.append(nxt)
 
             if self._unvisited_region_connected_on_grid(visited):
-                if self._backtrack_grid_path(nxt, visited, path, total):
+                if self._backtrack_grid_path(nxt, visited, path, total, budget):
                     return True
 
             path.pop()
@@ -303,7 +318,7 @@ class MazeBoardGenerator:
 
     def _is_border(self, cell: Coordinate) -> bool:
         r, c = cell
-        return r == 0 or c == 0 or r == self.size - 1 or c == self.size - 1
+        return r == 0 or c == 0 or r == self.rows - 1 or c == self.cols - 1
 
     def _graph_quality_ok(
         self,
@@ -320,7 +335,7 @@ class MazeBoardGenerator:
             return False
 
         branching_nodes = sum(1 for d in values if d >= 3)
-        if branching_nodes < max(3, self.size - 1):
+        if branching_nodes < max(3, min(self.rows, self.cols) - 1):
             return False
 
         degree_one_nodes = sum(1 for d in values if d == 1)
@@ -336,7 +351,7 @@ class MazeBoardGenerator:
         ambiguous_steps = self._count_ambiguous_solution_steps(
             allowed_edges, solution_path
         )
-        if ambiguous_steps < max(3, self.size - 1):
+        if ambiguous_steps < max(3, min(self.rows, self.cols) - 1):
             return False
 
         if not self._is_forced_start_cell(allowed_edges, solution_path, 0):
@@ -477,6 +492,49 @@ class MazeBoardGenerator:
 
         return letter_by_coord
 
+    def _generate_unique(self) -> BoardDict:
+        from .solver import count_solutions
+
+        total = len(self.cells)
+        if self.config.max_empty_run is None or self.config.max_walls is None:
+            raise ValueError("Set max_empty_run and max_walls for unique generation.")
+        max_step = self.config.max_empty_run + 1
+        gaps = len(self.word) - 1
+        if gaps < 1 or total - 1 > gaps * max_step:
+            raise ValueError("The word is too short for the maximum empty run.")
+        starts = [
+            (r, c) for r, c in self.cells
+            if not (r in (0, self.rows - 1) and c in (0, self.cols - 1))
+            and (total % 2 == 0 or (r + c) % 2 == 0)
+        ]
+        for attempt in range(self.config.max_graph_attempts):
+            try:
+                path = self._build_random_hamiltonian_path(starts)
+            except RuntimeError:
+                continue
+            candidates = sorted(
+                self.grid_edges - self._edges_from_path(path),
+                key=lambda edge: sorted(edge),
+            )
+            self.random.shuffle(candidates)
+            indices = [0]
+            for remaining in range(gaps - 1, -1, -1):
+                distance = total - 1 - indices[-1]
+                low = max(1, distance - remaining * max_step)
+                high = min(max_step, distance - remaining)
+                indices.append(indices[-1] + self.random.randint(low, high))
+            letters = self._build_letter_map(path, indices)
+            # Move toward more restrictive boards when the preferred density
+            # leaves multiple solutions or exhausts the solver budget.
+            target = self.config.wall_target
+            if attempt or target:
+                target = max(self.config.min_walls, target) + attempt
+            wall_count = min(len(candidates), self.config.max_walls, target)
+            open_edges = self.grid_edges - set(candidates[:wall_count])
+            if count_solutions(self.cells, open_edges, path[0], letters, self.word) == 1:
+                return self._build_board_json(open_edges, path, letters)
+        raise RuntimeError("Could not prove a unique Maze solution within the generation budget.")
+
     def _build_board_json(
         self,
         allowed_edges: Set[Edge],
@@ -487,10 +545,10 @@ class MazeBoardGenerator:
 
         start_coord = solution_path[0]
 
-        for row in range(self.size):
+        for row in range(self.rows):
             row_cells: List[Dict] = []
 
-            for col in range(self.size):
+            for col in range(self.cols):
                 coord = (row, col)
 
                 walls = {
@@ -525,8 +583,8 @@ class MazeBoardGenerator:
                 "locale": self.config.locale,
             },
             "dimensions": {
-                "rows": self.size,
-                "cols": self.size,
+                "rows": self.rows,
+                "cols": self.cols,
             },
             "cells": cells_json,
             "solutionPath": [{"row": r, "col": c} for r, c in solution_path],
@@ -544,7 +602,7 @@ class MazeBoardGenerator:
         allowed_edges: Set[Edge],
     ) -> bool:
         nr, nc = coord[0] + delta[0], coord[1] + delta[1]
-        if not (0 <= nr < self.size and 0 <= nc < self.size):
+        if not (0 <= nr < self.rows and 0 <= nc < self.cols):
             return True
 
         neighbor = (nr, nc)
